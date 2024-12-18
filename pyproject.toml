@@ -25,6 +25,8 @@ dependencies = [
     "diskcache",
     "cohere", 
     "google.auth",
+    "google-generativeai",
+    "google-cloud-aiplatform",
     "anthropic",
     "typer",
     "pyyaml",
