@@ -17,24 +17,21 @@ class GeminiTextGenerator(TextGenerator):
         provider: str = "gemini",
         model: str = None,
         models: Dict = None,
+        gemini_key_file: str = None,
     ):
         super().__init__(provider=provider)
-        api_key = api_key or os.environ.get("GEMINI_API_KEY", None)
-        if api_key is None:
+        if not api_key:
+            api_key = os.environ.get("GEMINI_API_KEY", None)
+        if not api_key and not gemini_key_file:
             raise ValueError(
-                "Gemini API key is not set. Please set the GEMINI_API_KEY environment variable."
+                "Gemini API key or service account key file is not set. Please set the GEMINI_API_KEY environment variable or provide a gemini_key_file."
             )
-        if api_key:
-            self.api_key = api_key
-            self.credentials = None 
-            self.project_id = None
-            self.project_location = None
-        else:
-            self.project_id = project_id
-            self.project_location = project_location
-            self.api_key = None
-            self.credentials = get_gcp_credentials(gemini_key_file) if gemini_key_file else None
-
+        self.api_key = api_key
+        self.credentials = None
+        self.project_id = project_id
+        self.project_location = project_location
+        if not self.api_key:
+            self.credentials = get_gcp_credentials(gemini_key_file)
         genai.configure(api_key=self.api_key, credentials=self.credentials)
         self.model_max_token_dict = get_models_maxtoken_dict(models)
         self.model_name = model or "gemini-pro"
@@ -45,7 +42,7 @@ class GeminiTextGenerator(TextGenerator):
         for message in messages:
             if message["role"] == "system":
                 system_messages += message["content"] + "\n"
-            else: 
+            else:
                 gemini_messages.append(
                     {"role": message["role"], "parts": [message["content"]]}
                 )
@@ -59,7 +56,7 @@ class GeminiTextGenerator(TextGenerator):
     ) -> TextGenerationResponse:
         use_cache = config.use_cache
         model = config.model or self.model_name
-        system_prompt, messages = self.format_messages(messages)
+        system_prompt, gemini_messages = self.format_messages(messages)
         self.model_name = model
 
         max_tokens = (
@@ -77,7 +74,7 @@ class GeminiTextGenerator(TextGenerator):
         }
 
         cache_key_params = {
-            "messages": messages,
+            "messages": gemini_messages,
             "model": model,
             "system_prompt": system_prompt,
             **gemini_config,
@@ -89,9 +86,22 @@ class GeminiTextGenerator(TextGenerator):
                 return TextGenerationResponse(**response)
 
         gen_model = genai.GenerativeModel(model)
-        chat = gen_model.start_chat(history=messages, system_prompt=system_prompt)
+
+        # Include system prompt in the first message of the history
+        if system_prompt:
+            gemini_messages.insert(0, {"role": "user", "parts": [system_prompt]})
+
+        chat = gen_model.start_chat(history=gemini_messages)
+
+        # Extract the last user message to send to the chat
+        last_user_message = ""
+        for msg in reversed(gemini_messages):
+            if msg["role"] == "user":
+                last_user_message = msg["parts"][0]
+                break
+
         gemini_response = chat.send_message(
-            "",
+            last_user_message,
             generation_config=gemini_config["generation_config"],
         )
 
