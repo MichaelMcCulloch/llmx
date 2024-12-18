@@ -12,7 +12,6 @@ class GeminiTextGenerator(TextGenerator):
     def __init__(
         self,
         api_key: str = None,
-        gemini_key_file: str = None,
         project_id: str = None,
         project_location: str = "us-central1",
         provider: str = "gemini",
@@ -20,9 +19,10 @@ class GeminiTextGenerator(TextGenerator):
         models: Dict = None,
     ):
         super().__init__(provider=provider)
-        if api_key is None and gemini_key_file is None:
+        api_key = api_key or os.environ.get("GEMINI_API_KEY", None)
+        if api_key is None:
             raise ValueError(
-                "Gemini API key or Gemini service account key file must be set."
+                "Gemini API key is not set. Please set the GEMINI_API_KEY environment variable."
             )
         if api_key:
             self.api_key = api_key
